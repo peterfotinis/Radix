@@ -1,3 +1,4 @@
+import Darwin
 import XCTest
 @testable import RadixCore
 
@@ -7,6 +8,16 @@ final class ScanVolumeBoundaryPolicyTests: XCTestCase {
     private let externalVolumeDevice: UInt64 = 0x0200_0002
     private let diskImageDevice: UInt64 = 0x0300_0004
     private let virtualMemoryVolumeDevice: UInt64 = 0x0100_0004
+
+    func testMountedFileSystemDeviceComesFromFSID() {
+        var fileSystem = statfs()
+        fileSystem.f_fsid.val.0 = Int32(bitPattern: 0x1234_ABCD)
+
+        XCTAssertEqual(
+            ScanEngine.mountedFileSystemDeviceID(fileSystem),
+            UInt64(0x1234_ABCD)
+        )
+    }
 
     private func makeDefaultMounts() -> [ScanEngine.ScanMountedFileSystem] {
         [

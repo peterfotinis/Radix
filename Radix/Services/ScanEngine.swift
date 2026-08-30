@@ -744,18 +744,15 @@ actor ScanEngine {
             let mountPath = cString(from: entry.f_mntonname)
             guard !mountPath.isEmpty else { return nil }
             let fileSystemType = cString(from: entry.f_fstypename)
-            let deviceID: UInt64?
-            if fileSystemType == "apfs" {
-                var mountStatus = stat()
-                let statusResult = mountPath.withCString { path in
-                    lstat(path, &mountStatus)
-                }
-                deviceID = statusResult == 0
-                    ? UInt64(truncatingIfNeeded: mountStatus.st_dev)
-                    : nil
-            } else {
-                deviceID = nil
-            }
+            // `lstat(mountPath)` observes macOS's synthesized startup-volume
+            // namespace and can report the Data-volume device for both members
+            // of a System/Data volume group. `getattrlistbulk`, which supplies
+            // child identities to the scanner, reports the mounted filesystem's
+            // own device instead. `f_fsid.val.0` is that authoritative device
+            // identifier and keeps both same-container devices in the policy.
+            let deviceID = fileSystemType == "apfs"
+                ? mountedFileSystemDeviceID(entry)
+                : nil
             return ScanMountedFileSystem(
                 mountPath: mountPath,
                 deviceName: cString(from: entry.f_mntfromname),
@@ -763,6 +760,10 @@ actor ScanEngine {
                 deviceID: deviceID
             )
         }
+    }
+
+    nonisolated static func mountedFileSystemDeviceID(_ fileSystem: statfs) -> UInt64 {
+        UInt64(truncatingIfNeeded: fileSystem.f_fsid.val.0)
     }
 
     nonisolated static func enumeratedDirectoryContents(
